@@ -630,23 +630,9 @@ optee = client (普通世界用户空间的客户端API) + linux kernel device d
 
 
 
-## 平台初始化
-
- 连接脚本中指定的入口函数被调用，初始化所有关键部分
-
-main_init_helper初始化UART，BSS，金丝雀等，当进入安全世界中，需要调用这些处理程序。
-
-
-
 ## 原理
 
 安全世界和普通世界通过SMC异常来通信
-
-发生SMC异常时，监控向量表状态的函数会被调用，监控器被设计为监听常规的SMC调用和FIQ请求两种异常。来自普通世界的调用被TEE设备驱动所初始化，依据SMC接口将参数放入，然后通过smc #0 触发SMC异常。此类异常将会被监控器即monitor捕捉到，然后做一些记录并通过查看`SRC.NS`决定下一步操作。当此调用进入到安全世界中时，首先发生的事情是将会分配一个线程给这项任务。分配完毕后，此线程将会启动或恢复在PC寄存器中存储的属于此线程的上下文。当此类调用是标准调用的情况下，方法`thread_alloc_and_run` ([thread.c](https://github.com/OP-TEE/optee_os/blob/master/core/arch/arm/kernel/thread.c))将会被调用。通过此方法可信OS（即OPTEE_OS）将会为此请求尝试寻找一个未使用的线程。若可信OS找到一个未使用的线程，则复制相关寄存器并设置PC寄存器准备跳转，也就是方法`thread_std_smc_entry`的功能，当所有的操作都完成后，线程已经准备好启动了。 当线程被启动或者恢复，tee_entry将调用任何预定义的服务核心在TEE。
-
-![img](https://img-blog.csdn.net/20160311102158258)
-
-
 
 ![preview](https://pic1.zhimg.com/v2-87f7944e1ad728438f4c459a69f62be8_r.jpg)
 
@@ -665,6 +651,14 @@ OP-TEE OS如何处理请求
 TA实现功能并返回结果
 
 
+
+## 完整调用流程
+
+在userspace层面调用CA接口后会触发system call操作，系统调用会将Linux陷入内核态，此时处于kernel space，然后根据传入的参数找到对应的tee driver
+
+tee driver到secure moniter状态（SMC），随即进入tee kernel
+
+tee os接管剩下的操作，首先获取从CA传过来的数据，解析出TA的UUID，并查找对应的TA image是否被挂载到TEE OS中，若没有，则与常驻在Linux中的tee_supplicant进程通信，利用它从文件系统中获取TA image文件，并传递给TEE OS，加载该image。然后，TEE OS会切换到TEE userspace态，并将CA传递过来的其他参数传给具体的TA process。TA process解析出commond ID，并根据这个来做具体的操作。
 
 
 
@@ -1419,7 +1413,7 @@ bin(88) #把十进制整型转换成二进制
 
 
 
-# 3.10 handleheader&组织论文框架
+# 3.10 handleheader
 
 examples.py 给曲线添加头部并merge
 
@@ -1479,6 +1473,25 @@ if __name__=='__main__':
 
 
 
+
+# 3.11  修改CA TA:hky_test
+
+https://www.bilibili.com/video/BV1L4411N7gZ?p=2
+
+记得修改完对应的代码后还需要修改主文件夹下（optee_example）的makefile文件，加一个自己的
+
+```
+EXAMPLE_LIST := hello_word hky_test
+```
+
+
+
+```
+mv source_name target_name
+cp source_file ./(指当前目录下)
+repo grep target_word(在当前目录下搜索想要找的字样)
+find / -name *.ta (在当前目录查找目标文件)
+```
 
 
 
